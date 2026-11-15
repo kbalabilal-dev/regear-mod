@@ -1,0 +1,23 @@
+{
+  "schemaVersion": 1,
+  "id": "regear",
+  "version": "${version}",
+  "name": "Auto Regear",
+  "description": "Client-side auto regear: buys your PvP kit (totems, crystals, pearls, obsidian, anchors, XP, glowstone) from the server shop with one key. Slots, amounts and messages are all configurable.",
+  "icon": "assets/regear/icon.png",
+  "environment": "client",
+  "entrypoints": {
+    "client": ["com.regearmod.RegearClient"],
+    "modmenu": ["com.regearmod.RegearModMenu"]
+  },
+  "mixins": ["regear.mixins.json"],
+  "depends": {
+    "fabricloader": ">=0.18.0",
+    "minecraft": "~1.21.11",
+    "java": ">=21",
+    "fabric-api": "*"
+  },
+  "suggests": {
+    "modmenu": "*"
+  }
+}
