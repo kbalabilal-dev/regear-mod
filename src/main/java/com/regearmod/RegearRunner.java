@@ -53,6 +53,7 @@ public final class RegearRunner {
     private static boolean paused, gotBought, gotFull, gotMoney;
     private static int sortIdx;
     private static boolean stackTapped;
+    private static int confirmBefore;
     private static final Set<Integer> sortFixed = new HashSet<>();
 
     private RegearRunner() {}
@@ -157,6 +158,7 @@ public final class RegearRunner {
     }
 
     private static void fail(MinecraftClient client, String reason) {
+        log(client, "FAIL in " + state + ": " + reason);
         state = State.IDLE;
         paused = false;
         closeWindow(client);
@@ -231,6 +233,12 @@ public final class RegearRunner {
         }
     }
 
+    private static void log(MinecraftClient client, String msg) {
+        if (RegearConfig.debug && client.player != null) {
+            client.player.sendMessage(Text.literal("[regear] " + msg), false);
+        }
+    }
+
     private static void status(MinecraftClient client, String msg) {
         if (client.player != null) client.player.sendMessage(Text.literal(msg), true);
     }
@@ -241,6 +249,7 @@ public final class RegearRunner {
     public static void onChat(String message) {
         if (state == State.IDLE || message == null) return;
         String m = message.toLowerCase(Locale.ROOT);
+        if (!message.startsWith("[regear]")) log(MinecraftClient.getInstance(), "chat: " + message);
         if (m.contains(RegearConfig.msgBought.toLowerCase(Locale.ROOT))) gotBought = true;
         if (m.contains(RegearConfig.msgFull.toLowerCase(Locale.ROOT))) gotFull = true;
         if (m.contains(RegearConfig.msgMoney.toLowerCase(Locale.ROOT))) gotMoney = true;
@@ -294,6 +303,8 @@ public final class RegearRunner {
     }
 
     private static void click(MinecraftClient client, GenericContainerScreenHandler h, int slot) {
+        log(client, state + ": click slot " + slot + " (" + stackAt(h, slot).getName().getString()
+                + " x" + stackAt(h, slot).getCount() + "), menu rows " + h.getRows());
         client.interactionManager.clickSlot(h.syncId, slot, 0, SlotActionType.PICKUP, client.player);
         cooldown = RegearConfig.clickDelayTicks;
     }
@@ -454,7 +465,8 @@ public final class RegearRunner {
                 Job j = jobs.get(jobIdx);
                 ItemStack shown = stackAt(h, RegearConfig.displaySlot);
                 if (!shown.isOf(j.kit.item)) {
-                    fail(client, "the buy menu changed unexpectedly");
+                    // The server may be redrawing the menu after a purchase: wait before giving up.
+                    if (timer > RegearConfig.waitTicks) fail(client, "the buy menu changed unexpectedly");
                     return;
                 }
                 int target = j.purchases.peek();
@@ -470,9 +482,10 @@ public final class RegearRunner {
                 }
                 if (max == 1 || count == target || (fullStack && stackTapped)) {
                     if (!isGreenPane(stackAt(h, RegearConfig.confirmSlot))) {
-                        fail(client, "confirm button not found (check Menu layout)");
+                        if (timer > RegearConfig.waitTicks) fail(client, "confirm button not found (check Menu layout)");
                         return;
                     }
+                    confirmBefore = countItem(client, j.kit.item);
                     gotBought = false;
                     gotFull = false;
                     gotMoney = false;
@@ -530,7 +543,8 @@ public final class RegearRunner {
                     fail(client, "not enough money");
                     return;
                 }
-                if (gotBought) {
+                if (gotBought || countItem(client, jobs.get(jobIdx).kit.item) > confirmBefore) {
+                    log(client, "purchase detected by " + (gotBought ? "chat message" : "item count"));
                     Job j = jobs.get(jobIdx);
                     j.purchases.poll();
                     donePurchases++;
@@ -560,7 +574,7 @@ public final class RegearRunner {
                     return;
                 }
                 if (timer > RegearConfig.waitTicks) {
-                    fail(client, "no purchase message was received (check the Messages page)");
+                    fail(client, "no purchase message was received and no item arrived (check the Messages page)");
                 }
             }
             case BACK_WAIT -> {

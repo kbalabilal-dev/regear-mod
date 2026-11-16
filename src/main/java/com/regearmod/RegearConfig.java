@@ -27,6 +27,7 @@ public final class RegearConfig {
     // ---- sorting and totems ----
     public static boolean sortEnabled = true;       // arrange hotbar + offhand after buying
     public static boolean fillTotems = false;       // buy totems last until every free slot is full
+    public static boolean debug = false;            // print every step in chat
     public static int offhandItem = KitItem.TOTEM.ordinal();   // -1 = leave the offhand alone
     public static int[] hotbarItem = defaultHotbar();          // hotbar slots 1-9, -1 = leave
 
@@ -66,6 +67,7 @@ public final class RegearConfig {
         int hudPos = 1;
         boolean sortEnabled = true;
         boolean fillTotems = false;
+        boolean debug = false;
         int offhandItem = KitItem.TOTEM.ordinal();
         int[] hotbarItem;
         int categorySlot = 12;
@@ -146,6 +148,7 @@ public final class RegearConfig {
             hudPos = clamp(d.hudPos, 0, 3);
             sortEnabled = d.sortEnabled;
             fillTotems = d.fillTotems;
+            debug = d.debug;
             int kits = KitItem.values().length;
             offhandItem = clamp(d.offhandItem, -1, kits - 1);
             hotbarItem = defaultHotbar();
@@ -186,6 +189,7 @@ public final class RegearConfig {
         d.hudPos = hudPos;
         d.sortEnabled = sortEnabled;
         d.fillTotems = fillTotems;
+        d.debug = debug;
         d.offhandItem = offhandItem;
         d.hotbarItem = hotbarItem.clone();
         d.categorySlot = categorySlot;

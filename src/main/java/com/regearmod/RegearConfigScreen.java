@@ -37,6 +37,10 @@ public class RegearConfigScreen extends Screen {
         return Text.literal(RegearConfig.hideWindow ? "Windows: hidden" : "Windows: shown");
     }
 
+    private static Text debugLabel() {
+        return Text.literal(RegearConfig.debug ? "Debug: on" : "Debug: off");
+    }
+
     private static Text startLabel() {
         return Text.literal(RegearRunner.isRunning() ? "Stop regear" : "Start regear");
     }
@@ -111,7 +115,12 @@ public class RegearConfigScreen extends Screen {
 
         // Row E: sorting and totem options
         addDrawableChild(ButtonWidget.builder(Text.literal("Sorting & totems..."), b -> client.setScreen(new RegearSortScreen(this)))
-                .dimensions(left, 190, 200, 20).build());
+                .dimensions(left, 190, 98, 20).build());
+        addDrawableChild(ButtonWidget.builder(debugLabel(), b -> {
+                    RegearConfig.debug = !RegearConfig.debug;
+                    RegearConfig.save();
+                    b.setMessage(debugLabel());
+                }).dimensions(right, 190, 98, 20).build());
 
         addDrawableChild(ButtonWidget.builder(Text.literal("Done"), b -> close())
                 .dimensions(width / 2 - 50, height - 28, 100, 20).build());
