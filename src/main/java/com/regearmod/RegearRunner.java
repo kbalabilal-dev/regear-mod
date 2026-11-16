@@ -186,14 +186,13 @@ public final class RegearRunner {
         cooldown = Math.max(5, RegearConfig.clickDelayTicks);   // let the inventory finish syncing
     }
 
-    /** Free spots for new items: the 36 main inventory slots plus the offhand. */
+    /** Free spots for new items: the 36 main inventory slots (the shop does not count the offhand). */
     private static int emptySlots(MinecraftClient client) {
         PlayerInventory inv = client.player.getInventory();
         int n = 0;
         for (int i = 0; i < 36 && i < inv.size(); i++) {
             if (inv.getStack(i).isEmpty()) n++;
         }
-        if (inv.size() > 40 && inv.getStack(40).isEmpty()) n++;
         return n;
     }
 
@@ -425,7 +424,16 @@ public final class RegearRunner {
                 }
                 int slot = findSlot(h, RegearConfig.kitSlot[j.kit.ordinal()], j.kit.item);
                 if (slot < 0) {
-                    if (timer > RegearConfig.waitTicks) fail(client, "could not find " + j.kit.label + " in the shop menu");
+                    if (timer > RegearConfig.waitTicks) {
+                        // Probably the wrong menu or a half-loaded one: reopen the shop and try again.
+                        if (++navRetries > 3) {
+                            fail(client, "could not find " + j.kit.label + " in the shop menu");
+                            return;
+                        }
+                        log(client, "item " + j.kit.label + " not found, reopening the shop (retry " + navRetries + ")");
+                        closeWindow(client);
+                        beginNavigation(client);
+                    }
                     return;
                 }
                 click(client, h, slot);
@@ -531,12 +539,9 @@ public final class RegearRunner {
             }
             case CONFIRM_WAIT -> {
                 if (gotFull) {
-                    Job cur = jobs.get(jobIdx);
-                    if (cur.kit == KitItem.TOTEM && RegearConfig.fillTotems) {
-                        finish(client);   // full inventory is the goal when filling with totems
-                        return;
-                    }
-                    fail(client, "your inventory is full");
+                    // Full inventory: stop buying, but still sort what was bought.
+                    log(client, "inventory full, finishing");
+                    finish(client);
                     return;
                 }
                 if (gotMoney) {
@@ -571,6 +576,12 @@ public final class RegearRunner {
                     baseSync = h.syncId;
                     state = State.BACK_WAIT;
                     timer = 0;
+                    return;
+                }
+                if (timer > RegearConfig.waitTicks && emptySlots(client) == 0) {
+                    // The shop refuses silently when there is no room: treat it as a full inventory.
+                    log(client, "no room in the inventory, finishing");
+                    finish(client);
                     return;
                 }
                 if (timer > RegearConfig.waitTicks) {
