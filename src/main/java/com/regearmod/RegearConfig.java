@@ -24,6 +24,12 @@ public final class RegearConfig {
     public static int waitTicks = 40;               // how long to wait for a menu / purchase message
     public static int hudPos = 1;                   // 0 = off, 1 = top center, 2 = top left, 3 = top right
 
+    // ---- sorting and totems ----
+    public static boolean sortEnabled = true;       // arrange hotbar + offhand after buying
+    public static boolean fillTotems = false;       // buy totems last until every free slot is full
+    public static int offhandItem = KitItem.TOTEM.ordinal();   // -1 = leave the offhand alone
+    public static int[] hotbarItem = defaultHotbar();          // hotbar slots 1-9, -1 = leave
+
     // ---- shop menus (defaults match the DraftSMP shop) ----
     public static int categorySlot = 12;            // "Gear" icon in the main shop menu
     public static int[] kitSlot = new int[KitItem.values().length];
@@ -58,6 +64,10 @@ public final class RegearConfig {
         int clickDelayTicks = 3;
         int waitTicks = 40;
         int hudPos = 1;
+        boolean sortEnabled = true;
+        boolean fillTotems = false;
+        int offhandItem = KitItem.TOTEM.ordinal();
+        int[] hotbarItem;
         int categorySlot = 12;
         int[] kitSlot;
         int[] kitAmount;
@@ -76,6 +86,12 @@ public final class RegearConfig {
     }
 
     private RegearConfig() {}
+
+    static int[] defaultHotbar() {
+        return new int[]{-1, KitItem.CRYSTAL.ordinal(), KitItem.OBSIDIAN.ordinal(), KitItem.ANCHOR.ordinal(),
+                KitItem.GLOWSTONE.ordinal(), KitItem.PEARL.ordinal(), KitItem.GOLDEN_APPLE.ordinal(),
+                KitItem.XP.ordinal(), KitItem.TOTEM.ordinal()};
+    }
 
     private static void resetKit() {
         for (KitItem k : KitItem.values()) {
@@ -128,6 +144,14 @@ public final class RegearConfig {
             clickDelayTicks = clamp(d.clickDelayTicks, 1, 40);
             waitTicks = clamp(d.waitTicks, 10, 200);
             hudPos = clamp(d.hudPos, 0, 3);
+            sortEnabled = d.sortEnabled;
+            fillTotems = d.fillTotems;
+            int kits = KitItem.values().length;
+            offhandItem = clamp(d.offhandItem, -1, kits - 1);
+            hotbarItem = defaultHotbar();
+            if (d.hotbarItem != null) {
+                for (int i = 0; i < 9 && i < d.hotbarItem.length; i++) hotbarItem[i] = clamp(d.hotbarItem[i], -1, kits - 1);
+            }
             categorySlot = clamp(d.categorySlot, 0, 53);
             resetKit();
             for (KitItem k : KitItem.values()) {
@@ -160,6 +184,10 @@ public final class RegearConfig {
         d.clickDelayTicks = clickDelayTicks;
         d.waitTicks = waitTicks;
         d.hudPos = hudPos;
+        d.sortEnabled = sortEnabled;
+        d.fillTotems = fillTotems;
+        d.offhandItem = offhandItem;
+        d.hotbarItem = hotbarItem.clone();
         d.categorySlot = categorySlot;
         d.kitSlot = kitSlot.clone();
         d.kitAmount = kitAmount.clone();

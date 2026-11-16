@@ -30,11 +30,12 @@ import java.util.Set;
  * reads and clicks the open window through the player's screen handler.
  */
 public final class RegearRunner {
-    private enum State { IDLE, OPENING, GEAR_WAIT, GEAR_PICK, BUY_WAIT, ADJUST, ADJUST_WAIT, CONFIRM_WAIT, BACK_WAIT }
+    private enum State { IDLE, OPENING, GEAR_WAIT, GEAR_PICK, BUY_WAIT, ADJUST, ADJUST_WAIT, CONFIRM_WAIT, BACK_WAIT, SORT }
 
     private static final class Job {
         final KitItem kit;
-        final int need;
+        int need;
+        boolean refreshed;
         final ArrayDeque<Integer> purchases = new ArrayDeque<>();
 
         Job(KitItem kit, int need) {
@@ -50,6 +51,8 @@ public final class RegearRunner {
     private static int totalPurchases, donePurchases, navRetries, attempts;
     private static int lastCount, lastMoveSlot, adjustClicks;
     private static boolean paused, gotBought, gotFull, gotMoney;
+    private static int sortIdx;
+    private static final Set<Integer> sortFixed = new HashSet<>();
 
     private RegearRunner() {}
 
@@ -82,6 +85,10 @@ public final class RegearRunner {
         List<String> l = new ArrayList<>();
         if (state == State.IDLE) return l;
         l.add("Auto Regear" + (paused ? "  [PAUSED]" : ""));
+        if (state == State.SORT) {
+            l.add("Sorting hotbar and offhand...");
+            return l;
+        }
         if (jobIdx < jobs.size()) {
             Job j = jobs.get(jobIdx);
             l.add("Buying: " + j.kit.label + " x" + j.need);
@@ -100,10 +107,21 @@ public final class RegearRunner {
 
         jobs.clear();
         totalPurchases = 0;
+        // Totems go last, so they can fill whatever space is left.
+        List<KitItem> order = new ArrayList<>();
         for (KitItem k : KitItem.values()) {
-            int target = RegearConfig.kitAmount[k.ordinal()];
-            if (target <= 0) continue;
-            int need = RegearConfig.topUp ? Math.max(0, target - countItem(client, k.item)) : target;
+            if (k != KitItem.TOTEM) order.add(k);
+        }
+        order.add(KitItem.TOTEM);
+        for (KitItem k : order) {
+            int need;
+            if (k == KitItem.TOTEM && RegearConfig.fillTotems) {
+                need = emptySlots(client);   // recounted when the totem purchases begin
+            } else {
+                int target = RegearConfig.kitAmount[k.ordinal()];
+                if (target <= 0) continue;
+                need = RegearConfig.topUp ? Math.max(0, target - countItem(client, k.item)) : target;
+            }
             if (need <= 0) continue;
             Job j = new Job(k, need);
             int max = k.maxStack();
@@ -113,7 +131,13 @@ public final class RegearRunner {
             jobs.add(j);
         }
         if (jobs.isEmpty()) {
-            status(client, "Regear: nothing to buy (kit already complete)");
+            if (RegearConfig.sortEnabled) {
+                donePurchases = 0;
+                status(client, "Regear: nothing to buy, sorting inventory");
+                beginSort(client);
+            } else {
+                status(client, "Regear: nothing to buy (kit already complete)");
+            }
             return;
         }
         jobIdx = 0;
@@ -141,10 +165,63 @@ public final class RegearRunner {
     }
 
     private static void finish(MinecraftClient client) {
-        state = State.IDLE;
         paused = false;
         closeWindow(client);
-        status(client, "Regear: done (" + donePurchases + " purchases)");
+        if (RegearConfig.sortEnabled) {
+            beginSort(client);
+        } else {
+            state = State.IDLE;
+            status(client, "Regear: done (" + donePurchases + " purchases)");
+        }
+    }
+
+    private static void beginSort(MinecraftClient client) {
+        state = State.SORT;
+        sortIdx = 0;
+        sortFixed.clear();
+        timer = 0;
+        cooldown = Math.max(5, RegearConfig.clickDelayTicks);   // let the inventory finish syncing
+    }
+
+    /** Free spots for new items: the 36 main inventory slots plus the offhand. */
+    private static int emptySlots(MinecraftClient client) {
+        PlayerInventory inv = client.player.getInventory();
+        int n = 0;
+        for (int i = 0; i < 36 && i < inv.size(); i++) {
+            if (inv.getStack(i).isEmpty()) n++;
+        }
+        if (inv.size() > 40 && inv.getStack(40).isEmpty()) n++;
+        return n;
+    }
+
+    /**
+     * Puts one wanted item into the offhand (step 0) or hotbar slot 1-9 (steps 1-9) with a swap click.
+     * Slots already handled are never taken from. Uses the player's own inventory screen handler.
+     */
+    private static void sortStep(MinecraftClient client) {
+        int step = sortIdx++;
+        int want = step == 0 ? RegearConfig.offhandItem : RegearConfig.hotbarItem[step - 1];
+        if (want < 0 || want >= KitItem.values().length) return;
+        Item item = KitItem.values()[want].item;
+        var h = client.player.playerScreenHandler;
+        int target = step == 0 ? 45 : 35 + step;        // 45 = offhand, 36-44 = hotbar
+        if (h.getSlot(target).getStack().isOf(item)) {
+            sortFixed.add(target);
+            return;
+        }
+        int src = -1;
+        for (int s = 9; s <= 44; s++) {                  // main inventory first, then hotbar
+            if (s == target || sortFixed.contains(s)) continue;
+            if (h.getSlot(s).getStack().isOf(item)) {
+                src = s;
+                break;
+            }
+        }
+        if (src < 0) return;
+        int button = step == 0 ? 40 : step - 1;          // 40 = offhand, 0-8 = hotbar slot
+        client.interactionManager.clickSlot(h.syncId, src, button, SlotActionType.SWAP, client.player);
+        sortFixed.add(target);
+        cooldown = RegearConfig.clickDelayTicks;
     }
 
     private static void closeWindow(MinecraftClient client) {
@@ -280,6 +357,14 @@ public final class RegearRunner {
 
         switch (state) {
             case IDLE -> { }
+            case SORT -> {
+                if (sortIdx > 9) {
+                    state = State.IDLE;
+                    status(client, "Regear: done (" + donePurchases + " purchases, hotbar sorted)");
+                    return;
+                }
+                sortStep(client);
+            }
             case OPENING -> {
                 GenericContainerScreenHandler h = newContainer(client);
                 if (h == null) {
@@ -312,6 +397,19 @@ public final class RegearRunner {
                     return;
                 }
                 Job j = jobs.get(jobIdx);
+                if (j.kit == KitItem.TOTEM && RegearConfig.fillTotems && !j.refreshed) {
+                    // Everything else is bought: fill the free space with totems.
+                    j.refreshed = true;
+                    int free = emptySlots(client);
+                    totalPurchases += free - j.purchases.size();
+                    j.purchases.clear();
+                    for (int i = 0; i < free; i++) j.purchases.add(1);
+                    j.need = free;
+                    if (free <= 0) {
+                        finish(client);
+                        return;
+                    }
+                }
                 int slot = findSlot(h, RegearConfig.kitSlot[j.kit.ordinal()], j.kit.item);
                 if (slot < 0) {
                     fail(client, "could not find " + j.kit.label + " in the shop menu");
@@ -409,6 +507,11 @@ public final class RegearRunner {
             }
             case CONFIRM_WAIT -> {
                 if (gotFull) {
+                    Job cur = jobs.get(jobIdx);
+                    if (cur.kit == KitItem.TOTEM && RegearConfig.fillTotems) {
+                        finish(client);   // full inventory is the goal when filling with totems
+                        return;
+                    }
                     fail(client, "your inventory is full");
                     return;
                 }

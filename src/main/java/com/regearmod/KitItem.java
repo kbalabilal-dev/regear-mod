@@ -11,7 +11,8 @@ public enum KitItem {
     OBSIDIAN("Obsidian", Items.OBSIDIAN, 9, 64),
     ANCHOR("Anchor", Items.RESPAWN_ANCHOR, 11, 0),
     XP("XP bottle", Items.EXPERIENCE_BOTTLE, 16, 64),
-    GLOWSTONE("Glowstone", Items.GLOWSTONE, 12, 0);
+    GLOWSTONE("Glowstone", Items.GLOWSTONE, 12, 0),
+    GOLDEN_APPLE("Golden apple", Items.GOLDEN_APPLE, 15, 16);
 
     public final String label;
     public final Item item;

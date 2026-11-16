@@ -109,6 +109,10 @@ public class RegearConfigScreen extends Screen {
                 }).dimensions(right, 168, 98, 20).build());
         pauseBtn.active = RegearRunner.isRunning();
 
+        // Row E: sorting and totem options
+        addDrawableChild(ButtonWidget.builder(Text.literal("Sorting & totems..."), b -> client.setScreen(new RegearSortScreen(this)))
+                .dimensions(left, 190, 200, 20).build());
+
         addDrawableChild(ButtonWidget.builder(Text.literal("Done"), b -> close())
                 .dimensions(width / 2 - 50, height - 28, 100, 20).build());
     }
