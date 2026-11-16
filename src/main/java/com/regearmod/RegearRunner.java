@@ -52,6 +52,7 @@ public final class RegearRunner {
     private static int lastCount, lastMoveSlot, adjustClicks;
     private static boolean paused, gotBought, gotFull, gotMoney;
     private static int sortIdx;
+    private static boolean stackTapped;
     private static final Set<Integer> sortFixed = new HashSet<>();
 
     private RegearRunner() {}
@@ -373,7 +374,8 @@ public final class RegearRunner {
                 }
                 int slot = findSlot(h, RegearConfig.categorySlot, Items.TOTEM_OF_UNDYING);
                 if (slot < 0) {
-                    fail(client, "could not find the Gear category in the main shop menu");
+                    // The menu may still be loading its items: keep looking until the wait time is over.
+                    if (timer > RegearConfig.waitTicks) fail(client, "could not find the Gear category in the main shop menu");
                     return;
                 }
                 click(client, h, slot);
@@ -412,7 +414,7 @@ public final class RegearRunner {
                 }
                 int slot = findSlot(h, RegearConfig.kitSlot[j.kit.ordinal()], j.kit.item);
                 if (slot < 0) {
-                    fail(client, "could not find " + j.kit.label + " in the shop menu");
+                    if (timer > RegearConfig.waitTicks) fail(client, "could not find " + j.kit.label + " in the shop menu");
                     return;
                 }
                 click(client, h, slot);
@@ -427,18 +429,19 @@ public final class RegearRunner {
                     return;
                 }
                 Job j = jobs.get(jobIdx);
-                if (!stackAt(h, RegearConfig.displaySlot).isOf(j.kit.item)) {
-                    fail(client, "the buy menu does not show " + j.kit.label + " (check Menu layout)");
-                    return;
-                }
-                if (!isGreenPane(stackAt(h, RegearConfig.confirmSlot))) {
-                    fail(client, "confirm button not found at slot " + RegearConfig.confirmSlot + " (check Menu layout)");
+                if (!stackAt(h, RegearConfig.displaySlot).isOf(j.kit.item)
+                        || !isGreenPane(stackAt(h, RegearConfig.confirmSlot))) {
+                    // Items may still be arriving from the server: wait before giving up.
+                    if (timer > RegearConfig.waitTicks) {
+                        fail(client, "the buy menu does not show " + j.kit.label + " or its confirm button (check Menu layout)");
+                    }
                     return;
                 }
                 state = State.ADJUST;
                 timer = 0;
                 attempts = 0;
                 adjustClicks = 0;
+                stackTapped = false;
                 blocked.clear();
             }
             case ADJUST -> {
@@ -457,7 +460,15 @@ public final class RegearRunner {
                 int target = j.purchases.peek();
                 int count = shown.getCount();
                 int max = j.kit.maxStack();
-                if (max == 1 || count == target) {
+                boolean fullStack = max > 1 && target == max;
+                if (fullStack && !stackTapped && !stackAt(h, RegearConfig.plus64Slot).isEmpty()) {
+                    // A full stack (16 for pearls, 64 for most): one tap on the 64 button, whatever the item.
+                    stackTapped = true;
+                    click(client, h, RegearConfig.plus64Slot);
+                    cooldown = Math.max(cooldown, 4);
+                    return;
+                }
+                if (max == 1 || count == target || (fullStack && stackTapped)) {
                     if (!isGreenPane(stackAt(h, RegearConfig.confirmSlot))) {
                         fail(client, "confirm button not found (check Menu layout)");
                         return;
@@ -528,6 +539,7 @@ public final class RegearRunner {
                         timer = 0;
                         attempts = 0;
                         adjustClicks = 0;
+                stackTapped = false;
                         blocked.clear();
                         return;
                     }
